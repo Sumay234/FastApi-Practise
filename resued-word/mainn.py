@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Response, HTTPException , status, Depends
+from fastapi import FastAPI, Response, HTTPException , status
 from fastapi.params import Body
 from pydantic import BaseModel 
 from typing import Optional
@@ -8,19 +8,14 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 
-from sqlalchemy.orm import Session
-from . import models, schemas
-from .database import engine  , get_db
-models.Base.metadata.create_all(bind=engine)
-
-
 app = FastAPI()
 
 
-# class Post(BaseModel):
-#     title  : str
-#     content : str
-#     published : bool = True
+
+class Post(BaseModel):
+    title  : str
+    content : str
+    published : bool = True
     # rating : Optional[int] = None
 
 while True:
@@ -58,12 +53,6 @@ def find_index_post(id: int):
     return None
 
 
-@app.get("/sqlalchemy")
-def test_posts(db: Session = Depends(get_db)):
-    post = db.query(models.Post).all()
-    return {"data" : post }
-
-
 @app.get("/posts")
 def get_posts():
     cursor.execute("""select * from posts""")
@@ -72,7 +61,7 @@ def get_posts():
     return {"data" : posts }
 
 @app.post("/posts" , status_code = status.HTTP_201_CREATED)
-def post(post: schemas.PostBase):
+def post(post: Post):
     cursor.execute(""" insert into posts 
                    (title, content, published) 
                    values (%s , %s, %s) returning * """ , 
@@ -82,29 +71,12 @@ def post(post: schemas.PostBase):
     return {"data" : new_posts}
 
 
-@app.post("/posts", status_code=status.HTTP_201_CREATED, response_model = schemas.Post)
-async def create_posts(post:schemas.PostCreate, db: Session = Depends(get_db)):
+@app.get("/posts/{id}" , status_code = status.HTTP_201_CREATED)
+async def get_post(id: int):
     
-    # new_post = models.Post(title = post.title , content=post.content,published = post.published )
-    new_post = models.Post(**post.dict())
-    db.add(new_post)
-    db.commit()
-    db.refresh()
-    return {"data": new_post}
+    cursor.execute(""" select * from posts where id = %s """, (str(id), ))
+    post = cursor.fetchone()
 
-
-
-
-
-
-
-@app.get("/post/{id}"  , status_code = status.HTTP_201_CREATED)
-async def get_post(id: int, db:Session = Depends(get_db) ):
-    
-    # cursor.execute(""" select * from posts where id = %s """, (str(id), ))
-    # post = cursor.fetchone()
-    post = db.query(models.Post).filter(models.Post.id == id).first()
-    
     if not post:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                              detail = f"post with id: {id} was not found")
@@ -113,7 +85,7 @@ async def get_post(id: int, db:Session = Depends(get_db) ):
 
 
 @app.delete("/posts/{id}", status_code = status.HTTP_204_NO_CONTENT)
-async def delete_post(id: int):
+def delete_post(id: int):
     
     cursor.execute( """ delete from posts where id = %s returning * """, (str(id),) )
     delete_post = cursor.fetchone()
@@ -132,11 +104,11 @@ async def delete_post(id: int):
 async def root():
     return {"message": "Hello world"}
 
-# @app.post("/create")
-# def create_post(new_post : Post):
-#     print(new_post)
-#     print(new_post.dict())
-#     return {"data" : new_post}
+@app.post("/create")
+def create_post(new_post : Post):
+    print(new_post)
+    print(new_post.dict())
+    return {"data" : new_post}
 
 # @app.post("/posts" , status_code = status.HTTP_201_CREATED)
 # def post(post: Post):
@@ -171,13 +143,13 @@ def delete_post(id: int):
     # return Response (status_code = status.HTTP_204_NO_CONTENT)
 
 # Update -> Put : Here we have to pass all the field
-# @app.put("/posts/{id}")
-# def update_post(id: int, post: models.Post):
-#     print(post)
-#     index = find_index_post(id)
-#     if index is None:
-#         raise HTTPException(status_code = status.HTTP_404_NOT_FOUND,
-#                             details = f"Post with id: {id} do not exists...")
+@app.put("/posts/{id}")
+def update_post(id: int, post: Post):
+    print(post)
+    index = find_index_post(id)
+    if index is None:
+        raise HTTPException(status_code = status.HTTP_404_NOT_FOUND,
+                            details = f"Post with id: {id} do not exists...")
 
     # my_post.pop(index)
     post_dict = post.__dict__
